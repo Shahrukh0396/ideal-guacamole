@@ -1,0 +1,10 @@
+{
+  "appDisplayName": "TalentForge Resume Formatter",
+  "description": "Upload resumes and download professionally formatted versions with stunning visual feedback",
+  "buildPath": "./dist",
+  "buildEntryPoint": "index.html",
+  "logoPath": "Default",
+  "localAppUrl": "http://localhost:5173/",
+  "connectionReferences": {},
+  "databaseReferences": {}
+}
