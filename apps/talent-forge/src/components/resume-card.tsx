@@ -1,20 +1,22 @@
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { FileText, Download, Loader2, CheckCircle2, AlertCircle, Play, ChevronDown, ChevronUp, Eye } from 'lucide-react';
+import { FileText, Download, Loader2, CheckCircle2, AlertCircle, Play, ChevronDown, ChevronUp, Eye, Share2, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
 import type { ResumeJob } from '@/services/resume-api';
 import { ProcessingAnimation } from './processing-animation';
 import { ParsedResumeView } from './parsed-resume-view';
-import { useParsedResume } from '@/hooks/use-resume-upload';
+import { useParsedResume, useResumeShares, useRevokeShare, useShareResume } from '@/hooks/use-resume-upload';
 
 interface ResumeCardProps {
     job: ResumeJob;
     onProcess: () => void;
-    onDownload: () => void;
+    onDownloadDocx: () => void;
+    onDownloadPdf: () => void;
     isProcessing?: boolean;
-    isDownloading?: boolean;
+    isDownloadingDocx?: boolean;
+    isDownloadingPdf?: boolean;
 }
 
 const statusConfig = {
@@ -51,9 +53,11 @@ const statusConfig = {
 export function ResumeCard({
     job,
     onProcess,
-    onDownload,
+    onDownloadDocx,
+    onDownloadPdf,
     isProcessing,
-    isDownloading,
+    isDownloadingDocx,
+    isDownloadingPdf,
 }: ResumeCardProps) {
     const [isExpanded, setIsExpanded] = useState(false);
     const [progress, setProgress] = useState(0);
@@ -157,26 +161,35 @@ export function ResumeCard({
                         )}
 
                         {/* Actions */}
-                        <div className="flex items-center gap-2 mt-4">
-                            {job.status === 'uploaded' && (
-                                <Button
-                                    size="sm"
-                                    onClick={onProcess}
-                                    disabled={isProcessing}
-                                    className="gap-2"
-                                >
-                                    {isProcessing ? (
-                                        <>
-                                            <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                                            Starting...
-                                        </>
-                                    ) : (
-                                        <>
-                                            <Play className="w-3.5 h-3.5" />
-                                            Start Formatting
-                                        </>
-                                    )}
-                                </Button>
+                        <div className="flex flex-wrap items-center gap-2 mt-4">
+                            {job.role === 'viewer' && (
+                                <span className="text-xs font-medium text-muted-foreground">Shared with you</span>
+                            )}
+
+                            {job.status === 'uploaded' && job.role !== 'viewer' && (
+                                <div className="flex flex-col items-start gap-2">
+                                    <p className="text-sm text-muted-foreground">
+                                        PDF and DOCX are created when formatting finishes.
+                                    </p>
+                                    <Button
+                                        size="sm"
+                                        onClick={onProcess}
+                                        disabled={isProcessing}
+                                        className="gap-2"
+                                    >
+                                        {isProcessing ? (
+                                            <>
+                                                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                                                Starting...
+                                            </>
+                                        ) : (
+                                            <>
+                                                <Play className="w-3.5 h-3.5" />
+                                                Start Formatting
+                                            </>
+                                        )}
+                                    </Button>
+                                </div>
                             )}
 
                             {job.status === 'completed' && (
@@ -197,21 +210,41 @@ export function ResumeCard({
                                     </Button>
                                     <Button
                                         size="sm"
-                                        onClick={onDownload}
-                                        disabled={isDownloading}
+                                        onClick={onDownloadDocx}
+                                        disabled={isDownloadingDocx}
                                         className="gap-2 bg-emerald-600 hover:bg-emerald-500"
                                     >
-                                        {isDownloading ? (
+                                        {isDownloadingDocx ? (
                                             <Loader2 className="w-3.5 h-3.5 animate-spin" />
                                         ) : (
                                             <Download className="w-3.5 h-3.5" />
                                         )}
                                         Download DOCX
                                     </Button>
+                                    <Button
+                                        size="sm"
+                                        variant="outline"
+                                        onClick={onDownloadPdf}
+                                        disabled={isDownloadingPdf}
+                                        className="gap-2"
+                                    >
+                                        {isDownloadingPdf ? (
+                                            <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                                        ) : (
+                                            <Download className="w-3.5 h-3.5" />
+                                        )}
+                                        Download PDF
+                                    </Button>
                                 </>
                             )}
 
-                            {job.status === 'failed' && (
+                            {job.role !== 'viewer' && (
+                                <div className="basis-full">
+                                    <SharePanel resumeId={job.resume_id} />
+                                </div>
+                            )}
+
+                            {job.status === 'failed' && job.role !== 'viewer' && (
                                 <Button
                                     size="sm"
                                     variant="outline"
@@ -245,5 +278,64 @@ export function ResumeCard({
                 </AnimatePresence>
             </div>
         </motion.div>
+    );
+}
+
+function SharePanel({ resumeId }: { resumeId: string }) {
+    const [open, setOpen] = useState(false);
+    const [email, setEmail] = useState('');
+    const shares = useResumeShares(open ? resumeId : null);
+    const share = useShareResume(resumeId);
+    const revoke = useRevokeShare(resumeId);
+
+    const submit = () => {
+        const value = email.trim();
+        if (!value) return;
+        share.mutate(value, { onSuccess: () => setEmail('') });
+    };
+
+    return (
+        <div className="mt-2">
+            <Button size="sm" variant="outline" className="gap-2" onClick={() => setOpen((value) => !value)}>
+                <Share2 className="w-3.5 h-3.5" />
+                Share
+            </Button>
+            {open && (
+                <div className="mt-3 space-y-3 rounded-xl border border-border/60 p-3">
+                    <div className="flex gap-2">
+                        <input
+                            type="email"
+                            value={email}
+                            onChange={(event) => setEmail(event.target.value)}
+                            placeholder="Colleague work email"
+                            className="h-9 flex-1 rounded-xl border border-border bg-background px-3 text-sm"
+                        />
+                        <Button size="sm" onClick={submit} disabled={share.isPending || !email.trim()}>
+                            {share.isPending ? 'Sharing…' : 'Give access'}
+                        </Button>
+                    </div>
+                    {shares.data && shares.data.length > 0 && (
+                        <ul className="space-y-2">
+                            {shares.data.map((item) => (
+                                <li key={item.id} className="flex items-center justify-between gap-3 text-sm">
+                                    <span className="truncate text-foreground">{item.email}</span>
+                                    <button
+                                        type="button"
+                                        className="text-muted-foreground hover:text-destructive"
+                                        onClick={() => revoke.mutate(item.id)}
+                                        aria-label={`Remove access for ${item.email}`}
+                                    >
+                                        <X className="w-4 h-4" />
+                                    </button>
+                                </li>
+                            ))}
+                        </ul>
+                    )}
+                    {shares.data && shares.data.length === 0 && (
+                        <p className="text-xs text-muted-foreground">Only you can see this resume.</p>
+                    )}
+                </div>
+            )}
+        </div>
     );
 }

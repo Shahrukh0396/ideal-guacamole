@@ -1,13 +1,10 @@
 /**
  * TalentForge API Service
  *
- * Direct calls to the Azure App Service.
- * Base URL: https://talentforge-egbqb0adakgxfyhd.centralus-01.azurewebsites.net/api/v1
+ * Calls go through apiFetch, which attaches the Entra access token.
  */
 
-const BASE_URL =
-  import.meta.env.VITE_API_BASE ||
-  'https://talentforge-egbqb0adakgxfyhd.centralus-01.azurewebsites.net/api/v1';
+import { apiFetch } from '@/auth/api';
 
 function createHeaders(headers?: HeadersInit): Headers {
   return new Headers(headers);
@@ -94,7 +91,7 @@ export async function uploadResume(file: File): Promise<ResumeJob> {
   const formData = new FormData();
   formData.append('file', file);
 
-  const response = await fetch(`${BASE_URL}/resumes`, {
+  const response = await apiFetch(`/resumes`, {
     method: 'POST',
     headers: createHeaders(),
     body: formData,
@@ -114,7 +111,7 @@ export async function uploadResume(file: File): Promise<ResumeJob> {
  * POST /resumes/{resume_id}/process
  */
 export async function processResume(resumeId: string): Promise<ResumeJob> {
-  const response = await fetch(`${BASE_URL}/resumes/${resumeId}/process`, {
+  const response = await apiFetch(`/resumes/${resumeId}/process`, {
     method: 'POST',
     headers: createHeaders(),
   });
@@ -133,7 +130,7 @@ export async function processResume(resumeId: string): Promise<ResumeJob> {
  * GET /resumes/{resume_id}
  */
 export async function getResumeStatus(resumeId: string): Promise<ResumeJob> {
-  const response = await fetch(`${BASE_URL}/resumes/${resumeId}`, {
+  const response = await apiFetch(`/resumes/${resumeId}`, {
     method: 'GET',
     headers: createHeaders(),
   });
@@ -152,7 +149,7 @@ export async function getResumeStatus(resumeId: string): Promise<ResumeJob> {
  * GET /resumes/{resume_id}/parsed
  */
 export async function getParsedResume(resumeId: string): Promise<ParsedResume> {
-  const response = await fetch(`${BASE_URL}/resumes/${resumeId}/parsed`, {
+  const response = await apiFetch(`/resumes/${resumeId}/parsed`, {
     method: 'GET',
     headers: createHeaders(),
   });
@@ -170,7 +167,7 @@ export async function getParsedResume(resumeId: string): Promise<ParsedResume> {
  * GET /resumes/{resume_id}/docx
  */
 export async function downloadResumeDocx(resumeId: string): Promise<Blob> {
-  const response = await fetch(`${BASE_URL}/resumes/${resumeId}/docx`, {
+  const response = await apiFetch(`/resumes/${resumeId}/docx`, {
     method: 'GET',
     headers: createHeaders(),
   });
@@ -188,7 +185,7 @@ export async function downloadResumeDocx(resumeId: string): Promise<Blob> {
  * GET /resumes/{resume_id}/pdf
  */
 export async function downloadResumePdf(resumeId: string): Promise<Blob> {
-  const response = await fetch(`${BASE_URL}/resumes/${resumeId}/pdf`, {
+  const response = await apiFetch(`/resumes/${resumeId}/pdf`, {
     method: 'GET',
     headers: createHeaders(),
   });
@@ -206,7 +203,7 @@ export async function downloadResumePdf(resumeId: string): Promise<Blob> {
  * GET /resumes/{resume_id}/download
  */
 export async function downloadResume(resumeId: string): Promise<Blob> {
-  const response = await fetch(`${BASE_URL}/resumes/${resumeId}/docx`, {
+  const response = await apiFetch(`/resumes/${resumeId}/docx`, {
     method: 'GET',
     headers: createHeaders(),
   });
@@ -229,7 +226,7 @@ export async function uploadResumesBatch(files: File[]): Promise<ResumeJob[]> {
     formData.append('files', file);
   }
 
-  const response = await fetch(`${BASE_URL}/resumes/batch`, {
+  const response = await apiFetch(`/resumes/batch`, {
     method: 'POST',
     headers: createHeaders(),
     body: formData,
@@ -249,7 +246,7 @@ export async function uploadResumesBatch(files: File[]): Promise<ResumeJob[]> {
  * POST /resumes/batch/process
  */
 export async function processResumesBatch(resumeIds: string[]): Promise<ResumeJob[]> {
-  const response = await fetch(`${BASE_URL}/resumes/batch/process`, {
+  const response = await apiFetch(`/resumes/batch/process`, {
     method: 'POST',
     headers: createHeaders({
       'Content-Type': 'application/json',

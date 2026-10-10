@@ -1,6 +1,24 @@
-import { Outlet } from 'react-router-dom';
+import { NavLink, Outlet } from 'react-router-dom';
 import { motion } from 'motion/react';
+import { useMsal } from '@azure/msal-react';
+import { History } from 'lucide-react';
 import { ThemeToggle } from '@/components/theme-toggle';
+import { Button } from '@/components/ui/button';
+import { cn } from '@/lib/utils';
+
+function SignOutButton() {
+    const { instance } = useMsal();
+
+    return (
+        <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => instance.logoutRedirect({ account: instance.getActiveAccount() ?? undefined })}
+        >
+            Sign out
+        </Button>
+    );
+}
 
 export default function Layout() {
     return (
@@ -78,7 +96,21 @@ export default function Layout() {
                     </div>
 
                     {/* Right side */}
-                    <div className="flex items-center gap-4">
+                    <div className="flex items-center gap-2 sm:gap-4">
+                        <NavLink
+                            to="/history"
+                            className={({ isActive }) =>
+                                cn(
+                                    'inline-flex items-center gap-2 rounded-xl px-3 py-2 text-sm font-medium transition-colors',
+                                    isActive
+                                        ? 'bg-primary/15 text-foreground'
+                                        : 'text-muted-foreground hover:bg-muted hover:text-foreground',
+                                )
+                            }
+                        >
+                            <History className="w-4 h-4" />
+                            History
+                        </NavLink>
                         {/* Status indicator */}
                         <div className="hidden sm:flex items-center gap-2 text-sm text-muted-foreground">
                             <span className="relative flex h-2 w-2">
@@ -88,7 +120,7 @@ export default function Layout() {
                             <span>API Connected</span>
                         </div>
 
-                        {/* Theme toggle */}
+                        <SignOutButton />
                         <ThemeToggle />
                     </div>
                 </div>

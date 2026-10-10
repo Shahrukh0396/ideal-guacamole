@@ -1,16 +1,9 @@
-import { useState } from 'react';
-import { motion, AnimatePresence } from 'motion/react';
-import { Sparkles, Zap, FileCheck, ArrowRight } from 'lucide-react';
+import { Link } from 'react-router-dom';
+import { motion } from 'motion/react';
+import { History, Sparkles, Zap, FileCheck } from 'lucide-react';
 import { UploadZone } from '@/components/upload-zone';
-import { ResumeCard } from '@/components/resume-card';
-import {
-    useResumeJobs,
-    useUploadResumes,
-    useProcessResumes,
-    useResumeStatusPolling,
-    useDownloadResume,
-} from '@/hooks/use-resume-upload';
-import type { ResumeJob } from '@/services/resume-api';
+import { ResumeList } from '@/components/resume-list';
+import { useUploadResumes } from '@/hooks/use-resume-upload';
 import { Button } from '@/components/ui/button';
 
 const features = [
@@ -48,49 +41,11 @@ const itemVariants = {
 } as const;
 
 export default function HomePage() {
-    const { jobs, setJobs } = useResumeJobs();
     const uploadMutation = useUploadResumes();
-    const processMutation = useProcessResumes();
-    const downloadMutation = useDownloadResume();
-
-    // Track which specific resume is being processed/downloaded
-    const [processingId, setProcessingId] = useState<string | null>(null);
-    const [downloadingId, setDownloadingId] = useState<string | null>(null);
-
-    // Poll status for processing jobs
-    useResumeStatusPolling(jobs, setJobs);
 
     const handleFilesSelected = (files: File[]) => {
         uploadMutation.mutate(files);
     };
-
-    const handleProcess = (resumeId: string) => {
-        setProcessingId(resumeId);
-        processMutation.mutate([resumeId], {
-            onSettled: () => setProcessingId(null),
-        });
-    };
-
-    const handleProcessAll = () => {
-        const uploadedJobs = jobs.filter((job: ResumeJob) => job.status === 'uploaded');
-        if (uploadedJobs.length > 0) {
-            processMutation.mutate(uploadedJobs.map((job: ResumeJob) => job.resume_id));
-        }
-    };
-
-    const handleDownload = (job: ResumeJob) => {
-        setDownloadingId(job.resume_id);
-        downloadMutation.mutate(job, {
-            onSettled: () => setDownloadingId(null),
-        });
-    };
-
-    const handleClearCompleted = () => {
-        setJobs((prev: ResumeJob[]) => prev.filter((job: ResumeJob) => job.status !== 'completed'));
-    };
-
-    const uploadedCount = jobs.filter((job: ResumeJob) => job.status === 'uploaded').length;
-    const completedCount = jobs.filter((job: ResumeJob) => job.status === 'completed').length;
 
     return (
         <div className="min-h-screen">
@@ -176,6 +131,19 @@ export default function HomePage() {
                     initial={{ opacity: 0, y: 30 }}
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ delay: 0.4, duration: 0.6 }}
+                    className="flex justify-end mb-4"
+                >
+                    <Button asChild variant="outline" size="sm">
+                        <Link to="/history">
+                            <History className="w-4 h-4" />
+                            Open history
+                        </Link>
+                    </Button>
+                </motion.div>
+                <motion.div
+                    initial={{ opacity: 0, y: 30 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: 0.4, duration: 0.6 }}
                 >
                     <UploadZone
                         onFilesSelected={handleFilesSelected}
@@ -184,56 +152,7 @@ export default function HomePage() {
                 </motion.div>
             </section>
 
-            {/* Jobs Section */}
-            <AnimatePresence>
-                {jobs.length > 0 && (
-                    <motion.section
-                        initial={{ opacity: 0, y: 20 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        exit={{ opacity: 0, y: -20 }}
-                        className="max-w-3xl mx-auto px-6 pb-20"
-                    >
-                        <div className="flex items-center justify-between mb-6">
-                            <h2 className="text-xl font-semibold text-foreground">
-                                Your Resumes ({jobs.length})
-                            </h2>
-                            <div className="flex gap-2">
-                                {completedCount > 0 && (
-                                    <Button variant="ghost" size="sm" onClick={handleClearCompleted}>
-                                        Clear Completed
-                                    </Button>
-                                )}
-                                {uploadedCount > 1 && (
-                                    <Button
-                                        size="sm"
-                                        onClick={handleProcessAll}
-                                        disabled={processMutation.isPending}
-                                        className="gap-2"
-                                    >
-                                        Format All
-                                        <ArrowRight className="w-4 h-4" />
-                                    </Button>
-                                )}
-                            </div>
-                        </div>
-
-                        <div className="grid gap-4">
-                            <AnimatePresence mode="popLayout">
-                                {jobs.map((job: ResumeJob) => (
-                                    <ResumeCard
-                                        key={job.resume_id}
-                                        job={job}
-                                        onProcess={() => handleProcess(job.resume_id)}
-                                        onDownload={() => handleDownload(job)}
-                                        isProcessing={processingId === job.resume_id}
-                                        isDownloading={downloadingId === job.resume_id}
-                                    />
-                                ))}
-                            </AnimatePresence>
-                        </div>
-                    </motion.section>
-                )}
-            </AnimatePresence>
+            <ResumeList hideWhenEmpty />
 
             {/* Footer accent */}
             <div className="fixed bottom-0 left-0 right-0 h-1 bg-gradient-to-r from-transparent via-primary/50 to-transparent" />

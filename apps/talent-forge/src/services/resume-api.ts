@@ -1,6 +1,4 @@
-const API_BASE =
-  import.meta.env.VITE_API_BASE ||
-  'https://talentforge-egbqb0adakgxfyhd.centralus-01.azurewebsites.net/api/v1';
+import { apiFetch } from '@/auth/api';
 
 function apiHeaders(init?: HeadersInit): Headers {
   const headers = new Headers(init);
@@ -10,18 +8,53 @@ function apiHeaders(init?: HeadersInit): Headers {
   return headers;
 }
 
+async function throwIfNotOk(response: Response, fallback: string): Promise<void> {
+  if (response.ok) return;
+
+  let message = `${fallback}: ${response.status} ${response.statusText}`;
+  try {
+    const data = await response.json();
+    if (typeof data?.detail === 'string') {
+      message = data.detail;
+    } else if (Array.isArray(data?.detail)) {
+      const messages = data.detail
+        .map((item: { msg?: string }) => item.msg)
+        .filter((msg: string | undefined): msg is string => Boolean(msg));
+      if (messages.length > 0) message = messages.join('; ');
+    } else if (typeof data?.message === 'string') {
+      message = data.message;
+    }
+  } catch {
+    // Keep the status fallback when the body is not JSON.
+  }
+
+  throw new Error(message);
+}
+
 export type ResumeStatus = 'uploaded' | 'processing' | 'completed' | 'failed';
+export type DownloadFormat = 'docx' | 'pdf';
 
 export interface ResumeJob {
   resume_id: string;
   filename: string;
   status: ResumeStatus;
   submitted_at?: string;
-  completed_at?: string;
+  processing_started_at?: string | null;
+  completed_at?: string | null;
   raw_blob_path?: string;
-  generated_blob_path?: string;
-  download_url?: string;
-  error_message?: string;
+  parsed_json_blob_path?: string | null;
+  generated_docx_blob_path?: string | null;
+  generated_pdf_blob_path?: string | null;
+  docx_download_url?: string | null;
+  pdf_download_url?: string | null;
+  error_message?: string | null;
+  role?: 'owner' | 'viewer';
+}
+
+export interface ResumeShare {
+  id: number;
+  email: string | null;
+  created_at: string;
 }
 
 // Normalize status from API (uppercase) to our type (lowercase)
@@ -81,19 +114,62 @@ export interface ParsedResume {
   languages?: (string | ParsedLanguage)[];
 }
 
+export class HistoryUnavailableError extends Error {
+  constructor() {
+    super('Saved history is not available from the server yet.');
+    this.name = 'HistoryUnavailableError';
+  }
+}
+
+export async function listResumes(): Promise<ResumeJob[]> {
+  const response = await apiFetch('/resumes', {
+    headers: apiHeaders(),
+  });
+  if (response.status === 404 || response.status === 405) {
+    throw new HistoryUnavailableError();
+  }
+  await throwIfNotOk(response, 'Could not load your resumes');
+  const data = await response.json();
+  return (data as Record<string, unknown>[]).map(normalizeJob);
+}
+
+export async function listResumeShares(resumeId: string): Promise<ResumeShare[]> {
+  const response = await apiFetch(`/resumes/${resumeId}/shares`, {
+    headers: apiHeaders(),
+  });
+  await throwIfNotOk(response, 'Could not load shares');
+  return response.json();
+}
+
+export async function shareResume(resumeId: string, email: string): Promise<ResumeShare> {
+  const response = await apiFetch(`/resumes/${resumeId}/share`, {
+    method: 'POST',
+    headers: apiHeaders({ 'Content-Type': 'application/json' }),
+    body: JSON.stringify({ email }),
+  });
+  await throwIfNotOk(response, 'Could not share this resume');
+  return response.json();
+}
+
+export async function revokeResumeShare(resumeId: string, shareId: number): Promise<void> {
+  const response = await apiFetch(`/resumes/${resumeId}/shares/${shareId}`, {
+    method: 'DELETE',
+    headers: apiHeaders(),
+  });
+  await throwIfNotOk(response, 'Could not remove access');
+}
+
 export async function uploadSingleResume(file: File): Promise<ResumeJob> {
   const formData = new FormData();
   formData.append('file', file);
 
-  const response = await fetch(`${API_BASE}/resumes`, {
+  const response = await apiFetch(`/resumes`, {
     method: 'POST',
     headers: apiHeaders(),
     body: formData,
   });
 
-  if (!response.ok) {
-    throw new Error(`Upload failed: ${response.statusText}`);
-  }
+  await throwIfNotOk(response, 'Upload failed');
 
   const data = await response.json();
   return normalizeJob(data);
@@ -105,36 +181,32 @@ export async function uploadMultipleResumes(files: File[]): Promise<ResumeJob[]>
     formData.append('files', file);
   });
 
-  const response = await fetch(`${API_BASE}/resumes/batch`, {
+  const response = await apiFetch(`/resumes/batch`, {
     method: 'POST',
     headers: apiHeaders(),
     body: formData,
   });
 
-  if (!response.ok) {
-    throw new Error(`Batch upload failed: ${response.statusText}`);
-  }
+  await throwIfNotOk(response, 'Batch upload failed');
 
   const data = await response.json();
   return (data as Record<string, unknown>[]).map(normalizeJob);
 }
 
 export async function processResume(resumeId: string): Promise<ResumeJob> {
-  const response = await fetch(`${API_BASE}/resumes/${resumeId}/process`, {
+  const response = await apiFetch(`/resumes/${resumeId}/process`, {
     method: 'POST',
     headers: apiHeaders(),
   });
 
-  if (!response.ok) {
-    throw new Error(`Processing failed: ${response.statusText}`);
-  }
+  await throwIfNotOk(response, 'Processing failed');
 
   const data = await response.json();
   return normalizeJob(data);
 }
 
 export async function processBatchResumes(resumeIds: string[]): Promise<ResumeJob[]> {
-  const response = await fetch(`${API_BASE}/resumes/batch/process`, {
+  const response = await apiFetch(`/resumes/batch/process`, {
     method: 'POST',
     headers: apiHeaders({
       'Content-Type': 'application/json',
@@ -142,92 +214,60 @@ export async function processBatchResumes(resumeIds: string[]): Promise<ResumeJo
     body: JSON.stringify({ resume_ids: resumeIds }),
   });
 
-  if (!response.ok) {
-    throw new Error(`Batch processing failed: ${response.statusText}`);
-  }
+  await throwIfNotOk(response, 'Batch processing failed');
 
   const data = await response.json();
   return (data as Record<string, unknown>[]).map(normalizeJob);
 }
 
 export async function getResumeStatus(resumeId: string): Promise<ResumeJob> {
-  const response = await fetch(`${API_BASE}/resumes/${resumeId}`, {
+  const response = await apiFetch(`/resumes/${resumeId}`, {
     headers: apiHeaders(),
   });
 
-  if (!response.ok) {
-    throw new Error(`Status check failed: ${response.statusText}`);
-  }
+  await throwIfNotOk(response, 'Status check failed');
 
   const data = await response.json();
   return normalizeJob(data);
 }
 
 export async function getParsedResume(resumeId: string): Promise<ParsedResume> {
-  const response = await fetch(`${API_BASE}/resumes/${resumeId}/parsed`, {
+  const response = await apiFetch(`/resumes/${resumeId}/parsed`, {
     headers: apiHeaders(),
   });
 
-  if (!response.ok) {
-    throw new Error(`Failed to fetch parsed data: ${response.statusText}`);
-  }
+  await throwIfNotOk(response, 'Failed to fetch parsed data');
 
   return response.json();
 }
 
-export async function downloadResume(job: ResumeJob): Promise<Blob> {
-  const downloadUrl = `${API_BASE}/resumes/${job.resume_id}/docx`;
-  
-  console.log('[Download] Attempting download from:', downloadUrl);
-  console.log('[Download] Job data:', JSON.stringify(job, null, 2));
-  
-  const response = await fetch(downloadUrl, {
+const downloadAccept: Record<DownloadFormat, string> = {
+  docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/octet-stream,*/*',
+  pdf: 'application/pdf,application/octet-stream,*/*',
+};
+
+export async function downloadResume(job: ResumeJob, format: DownloadFormat): Promise<Blob> {
+  const response = await apiFetch(`/resumes/${job.resume_id}/${format}`, {
     method: 'GET',
     headers: apiHeaders({
-      Accept:
-        'application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/octet-stream,*/*',
+      Accept: downloadAccept[format],
     }),
   });
 
-  console.log('[Download] Response status:', response.status, response.statusText);
-  console.log('[Download] Response headers:', Object.fromEntries(response.headers.entries()));
-
-  if (!response.ok) {
-    let errorMsg = `Download failed: ${response.status} ${response.statusText}`;
-    try {
-      const contentType = response.headers.get('content-type') || '';
-      if (contentType.includes('application/json')) {
-        const errorData = await response.json();
-        console.log('[Download] Error response JSON:', errorData);
-        errorMsg = errorData.detail || errorData.message || errorMsg;
-      } else {
-        const errorText = await response.text();
-        console.log('[Download] Error response text:', errorText);
-        if (errorText) errorMsg = errorText;
-      }
-    } catch (parseError) {
-      console.log('[Download] Could not parse error response:', parseError);
-    }
-    throw new Error(errorMsg);
-  }
+  await throwIfNotOk(response, `${format.toUpperCase()} download failed`);
 
   const blob = await response.blob();
-  console.log('[Download] Blob received - size:', blob.size, 'type:', blob.type);
-  
   if (blob.size === 0) {
     throw new Error('Downloaded file is empty');
   }
-  
+
   return blob;
 }
 
-export function downloadFile(blob: Blob, filename: string) {
-  // Create a clean formatted filename
+export function downloadFile(blob: Blob, filename: string, format: DownloadFormat) {
   const baseName = filename.replace(/\.[^/.]+$/, '');
-  const formattedFilename = `${baseName}_formatted.docx`;
-  
-  console.log('[Download] Triggering file download:', formattedFilename);
-  
+  const formattedFilename = `${baseName}_formatted.${format}`;
+
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
@@ -236,6 +276,4 @@ export function downloadFile(blob: Blob, filename: string) {
   a.click();
   document.body.removeChild(a);
   URL.revokeObjectURL(url);
-  
-  console.log('[Download] File download triggered successfully');
 }

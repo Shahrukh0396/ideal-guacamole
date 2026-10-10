@@ -1,6 +1,4 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useAtom } from 'jotai';
-import { atomWithStorage } from 'jotai/utils';
 import {
   uploadSingleResume,
   uploadMultipleResumes,
@@ -10,22 +8,49 @@ import {
   getParsedResume,
   downloadResume,
   downloadFile,
+  listResumes,
+  HistoryUnavailableError,
+  listResumeShares,
+  shareResume,
+  revokeResumeShare,
+  type DownloadFormat,
   type ResumeJob,
+  type ResumeShare,
   type ParsedResume,
 } from '@/services/resume-api';
 import { toast } from 'sonner';
 
-// Persist resume jobs in session storage
-const resumeJobsAtom = atomWithStorage<ResumeJob[]>('talentforge-jobs', []);
+const historyKey = ['resume-history'] as const;
 
 export function useResumeJobs() {
-  const [jobs, setJobs] = useAtom(resumeJobsAtom);
-  return { jobs, setJobs };
+  const queryClient = useQueryClient();
+  const history = useQuery({
+    queryKey: historyKey,
+    queryFn: listResumes,
+    retry: (failureCount, error) => !(error instanceof HistoryUnavailableError) && failureCount < 2,
+  });
+
+  const setJobs = (updater: ResumeJob[] | ((prev: ResumeJob[]) => ResumeJob[])) => {
+    queryClient.setQueryData(historyKey, (prev: ResumeJob[] | undefined) => {
+      const current = prev ?? [];
+      return typeof updater === 'function' ? updater(current) : updater;
+    });
+  };
+
+  return {
+    jobs: history.data ?? [],
+    setJobs,
+    isLoading: history.isPending,
+    historyUnavailable: history.error instanceof HistoryUnavailableError,
+    error:
+      history.error instanceof HistoryUnavailableError || !(history.error instanceof Error)
+        ? null
+        : history.error,
+  };
 }
 
 export function useUploadResumes() {
   const { setJobs } = useResumeJobs();
-  const queryClient = useQueryClient();
 
   return useMutation({
     mutationFn: async (files: File[]) => {
@@ -36,7 +61,6 @@ export function useUploadResumes() {
     },
     onSuccess: (newJobs: ResumeJob[]) => {
       setJobs((prev: ResumeJob[]) => [...prev, ...newJobs]);
-      queryClient.invalidateQueries({ queryKey: ['resume-jobs'] });
       toast.success(`${newJobs.length} resume${newJobs.length > 1 ? 's' : ''} uploaded successfully!`);
     },
     onError: (error: Error) => {
@@ -47,7 +71,6 @@ export function useUploadResumes() {
 
 export function useProcessResumes() {
   const { setJobs } = useResumeJobs();
-  const queryClient = useQueryClient();
 
   return useMutation({
     mutationFn: async (resumeIds: string[]) => {
@@ -67,7 +90,6 @@ export function useProcessResumes() {
           return job;
         })
       );
-      queryClient.invalidateQueries({ queryKey: ['resume-jobs'] });
       toast.success('Processing started! This may take a moment...');
     },
     onError: (error: Error) => {
@@ -99,7 +121,7 @@ export function useResumeStatusPolling(jobs: ResumeJob[], setJobs: (fn: (prev: R
         prev.map((job: ResumeJob) => {
           const newStatus = statuses.find((s: ResumeJob) => s.resume_id === job.resume_id);
           if (newStatus) {
-            return newStatus;
+            return { ...job, ...newStatus, role: newStatus.role ?? job.role };
           }
           return job;
         })
@@ -118,17 +140,55 @@ export function useResumeStatusPolling(jobs: ResumeJob[], setJobs: (fn: (prev: R
   });
 }
 
-export function useDownloadResume() {
+export function useDownloadResume(format: DownloadFormat) {
   return useMutation({
     mutationFn: async (job: ResumeJob) => {
-      const blob = await downloadResume(job);
-      downloadFile(blob, job.filename);
+      const blob = await downloadResume(job, format);
+      downloadFile(blob, job.filename, format);
     },
     onSuccess: () => {
-      toast.success('Download started!');
+      toast.success(`${format.toUpperCase()} download started!`);
     },
     onError: (error: Error) => {
       toast.error(error.message || 'Download failed');
+    },
+  });
+}
+
+export function useResumeShares(resumeId: string | null) {
+  return useQuery<ResumeShare[]>({
+    queryKey: ['resume-shares', resumeId],
+    queryFn: () => listResumeShares(resumeId!),
+    enabled: !!resumeId,
+  });
+}
+
+export function useShareResume(resumeId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (email: string) => shareResume(resumeId, email),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['resume-shares', resumeId] });
+      queryClient.invalidateQueries({ queryKey: historyKey });
+      toast.success('Resume shared');
+    },
+    onError: (error: Error) => {
+      toast.error(error.message || 'Could not share this resume');
+    },
+  });
+}
+
+export function useRevokeShare(resumeId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (shareId: number) => revokeResumeShare(resumeId, shareId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['resume-shares', resumeId] });
+      queryClient.invalidateQueries({ queryKey: historyKey });
+      toast.success('Access removed');
+    },
+    onError: (error: Error) => {
+      toast.error(error.message || 'Could not remove access');
     },
   });
 }
