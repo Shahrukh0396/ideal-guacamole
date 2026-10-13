@@ -1,15 +1,15 @@
 import { motion } from 'motion/react';
 import {
     User,
-    Mail,
-    Phone,
     MapPin,
-    Linkedin,
-    Globe,
     Briefcase,
     GraduationCap,
     Award,
+    Heart,
+    Info,
     Languages,
+    Scale,
+    Users,
     Wrench,
     Loader2,
 } from 'lucide-react';
@@ -38,6 +38,16 @@ const staggerContainer = {
     },
 } as const;
 
+function textItems(values?: Array<string | { name?: string; title?: string; certification?: string }>): string[] {
+    if (!values) return [];
+    return values
+        .map((item) => {
+            if (typeof item === 'string') return item;
+            return item.name || item.title || item.certification || '';
+        })
+        .filter((item) => item.trim().length > 0);
+}
+
 export function ParsedResumeView({ data, isLoading }: ParsedResumeViewProps) {
     if (isLoading) {
         return (
@@ -55,6 +65,18 @@ export function ParsedResumeView({ data, isLoading }: ParsedResumeViewProps) {
             </div>
         );
     }
+
+    const skills = [...(data.technical_skills ?? []), ...(data.skills ?? [])];
+    const competencies = data.core_competencies ?? [];
+    const experience = data.professional_experience?.length
+        ? data.professional_experience
+        : (data.experience ?? []);
+    const education = data.education ?? [];
+    const certifications = textItems(data.certifications);
+    const additionalInformation = textItems(data.additional_information);
+    const volunteer = data.volunteer_experience ?? [];
+    const extracurricular = textItems(data.extracurricular_activities);
+    const barLicenses = textItems(data.bar_licenses);
 
     return (
         <motion.div
@@ -82,37 +104,27 @@ export function ParsedResumeView({ data, isLoading }: ParsedResumeViewProps) {
                     </div>
                 )}
 
-                {/* Contact Links */}
-                <div className="flex flex-wrap gap-3">
-                    {data.email && (
-                        <ContactBadge icon={Mail} label={data.email} />
-                    )}
-                    {data.phone && (
-                        <ContactBadge icon={Phone} label={data.phone} />
-                    )}
-                    {data.linkedin && (
-                        <ContactBadge icon={Linkedin} label="LinkedIn" href={data.linkedin} />
-                    )}
-                    {data.website && (
-                        <ContactBadge icon={Globe} label="Website" href={data.website} />
-                    )}
-                </div>
             </motion.div>
 
-            {/* Summary */}
-            {data.summary && (
+            {(data.summary || competencies.length > 0) && (
                 <motion.div variants={sectionVariants}>
-                    <SectionHeader title="Summary" />
-                    <p className="text-foreground/90 leading-relaxed">{data.summary}</p>
+                    <SectionHeader title="Summary of Qualifications" />
+                    {data.summary && (
+                        <p className="text-foreground/90 leading-relaxed">{data.summary}</p>
+                    )}
+                    {competencies.length > 0 && (
+                        <div className={data.summary ? 'mt-3' : undefined}>
+                            <BulletList items={competencies} />
+                        </div>
+                    )}
                 </motion.div>
             )}
 
-            {/* Skills */}
-            {data.skills && data.skills.length > 0 && (
+            {skills.length > 0 && (
                 <motion.div variants={sectionVariants}>
-                    <SectionHeader title="Skills" icon={Wrench} />
+                    <SectionHeader title="Technical Skills" icon={Wrench} />
                     <div className="flex flex-wrap gap-2">
-                        {data.skills.map((skill: string, index: number) => (
+                        {skills.map((skill: string, index: number) => (
                             <Badge
                                 key={index}
                                 variant="secondary"
@@ -125,42 +137,64 @@ export function ParsedResumeView({ data, isLoading }: ParsedResumeViewProps) {
                 </motion.div>
             )}
 
-            {/* Experience */}
-            {data.experience && data.experience.length > 0 && (
+            {experience.length > 0 && (
                 <motion.div variants={sectionVariants}>
-                    <SectionHeader title="Experience" icon={Briefcase} />
+                    <SectionHeader title="Professional Experience" icon={Briefcase} />
                     <div className="space-y-4">
-                        {data.experience.map((exp: ParsedExperience, index: number) => (
+                        {experience.map((exp: ParsedExperience, index: number) => (
                             <ExperienceCard key={index} experience={exp} />
                         ))}
                     </div>
                 </motion.div>
             )}
 
-            {/* Education */}
-            {data.education && data.education.length > 0 && (
+            {education.length > 0 && (
                 <motion.div variants={sectionVariants}>
                     <SectionHeader title="Education" icon={GraduationCap} />
                     <div className="space-y-3">
-                        {data.education.map((edu: ParsedEducation, index: number) => (
+                        {education.map((edu: ParsedEducation | string, index: number) => (
                             <EducationCard key={index} education={edu} />
                         ))}
                     </div>
                 </motion.div>
             )}
 
-            {/* Certifications */}
-            {data.certifications && data.certifications.length > 0 && (
+            {certifications.length > 0 && (
                 <motion.div variants={sectionVariants}>
                     <SectionHeader title="Certifications" icon={Award} />
-                    <ul className="space-y-1.5">
-                        {data.certifications.map((cert: string, index: number) => (
-                            <li key={index} className="flex items-center gap-2 text-foreground/90">
-                                <div className="w-1.5 h-1.5 rounded-full bg-primary" />
-                                {cert}
-                            </li>
+                    <BulletList items={certifications} />
+                </motion.div>
+            )}
+
+            {additionalInformation.length > 0 && (
+                <motion.div variants={sectionVariants}>
+                    <SectionHeader title="Additional Information" icon={Info} />
+                    <BulletList items={additionalInformation} />
+                </motion.div>
+            )}
+
+            {volunteer.length > 0 && (
+                <motion.div variants={sectionVariants}>
+                    <SectionHeader title="Volunteer Experience" icon={Heart} />
+                    <div className="space-y-4">
+                        {volunteer.map((exp: ParsedExperience, index: number) => (
+                            <ExperienceCard key={index} experience={exp} />
                         ))}
-                    </ul>
+                    </div>
+                </motion.div>
+            )}
+
+            {extracurricular.length > 0 && (
+                <motion.div variants={sectionVariants}>
+                    <SectionHeader title="Extracurricular Activities" icon={Users} />
+                    <BulletList items={extracurricular} />
+                </motion.div>
+            )}
+
+            {barLicenses.length > 0 && (
+                <motion.div variants={sectionVariants}>
+                    <SectionHeader title="Bar Licenses" icon={Scale} />
+                    <BulletList items={barLicenses} />
                 </motion.div>
             )}
 
@@ -200,42 +234,32 @@ function SectionHeader({ title, icon: Icon }: { title: string; icon?: React.Comp
     );
 }
 
-function ContactBadge({
-    icon: Icon,
-    label,
-    href,
-}: {
-    icon: React.ComponentType<{ className?: string }>;
-    label: string;
-    href?: string;
-}) {
-    const content = (
-        <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm bg-muted/50 text-foreground/80 hover:bg-muted transition-colors">
-            <Icon className="w-3.5 h-3.5" />
-            {label}
-        </span>
+function BulletList({ items }: { items: string[] }) {
+    return (
+        <ul className="space-y-1.5">
+            {items.map((item, index) => (
+                <li key={index} className="flex items-center gap-2 text-foreground/90">
+                    <div className="w-1.5 h-1.5 rounded-full bg-primary" />
+                    {item}
+                </li>
+            ))}
+        </ul>
     );
-
-    if (href) {
-        return (
-            <a href={href} target="_blank" rel="noopener noreferrer" className="hover:scale-105 transition-transform">
-                {content}
-            </a>
-        );
-    }
-
-    return content;
 }
 
 function ExperienceCard({ experience }: { experience: ParsedExperience }) {
-    const dateRange = [experience.start_date, experience.end_date].filter(Boolean).join(' - ');
+    const dateRange = experience.dates
+        || [experience.start_date, experience.end_date].filter(Boolean).join(' – ');
+    const title = experience.role || experience.title;
+    const company = experience.company || experience.organization;
+    const highlights = experience.bullets?.length ? experience.bullets : experience.highlights;
 
     return (
         <div className="relative pl-4 border-l-2 border-primary/30 hover:border-primary transition-colors">
             <div className="absolute -left-[5px] top-1.5 w-2 h-2 rounded-full bg-primary" />
             <div className="space-y-1">
-                <h5 className="font-semibold text-foreground">{experience.title}</h5>
-                <p className="text-sm text-primary font-medium">{experience.company}</p>
+                {title && <h5 className="font-semibold text-foreground">{title}</h5>}
+                {company && <p className="text-sm text-primary font-medium">{company}</p>}
                 <div className="flex items-center gap-3 text-xs text-muted-foreground">
                     {dateRange && <span>{dateRange}</span>}
                     {experience.location && (
@@ -248,9 +272,9 @@ function ExperienceCard({ experience }: { experience: ParsedExperience }) {
                 {experience.description && (
                     <p className="text-sm text-foreground/80 mt-2">{experience.description}</p>
                 )}
-                {experience.highlights && experience.highlights.length > 0 && (
+                {highlights && highlights.length > 0 && (
                     <ul className="mt-2 space-y-1">
-                        {experience.highlights.map((highlight: string, idx: number) => (
+                        {highlights.map((highlight: string, idx: number) => (
                             <li key={idx} className="text-sm text-foreground/80 flex items-start gap-2">
                                 <span className="text-primary mt-1.5">•</span>
                                 {highlight}
@@ -263,17 +287,31 @@ function ExperienceCard({ experience }: { experience: ParsedExperience }) {
     );
 }
 
-function EducationCard({ education }: { education: ParsedEducation }) {
+function EducationCard({ education }: { education: ParsedEducation | string }) {
+    if (typeof education === 'string') {
+        return (
+            <div className="p-3 rounded-lg bg-muted/30 border border-border/50">
+                <h5 className="font-semibold text-foreground">{education}</h5>
+            </div>
+        );
+    }
+
+    const credential = education.credential || education.degree;
+    const institution = education.institution || education.school;
+
     return (
         <div className={cn(
             'p-3 rounded-lg bg-muted/30 border border-border/50',
             'hover:bg-muted/50 transition-colors'
         )}>
-            <h5 className="font-semibold text-foreground">{education.degree}</h5>
+            {credential && <h5 className="font-semibold text-foreground">{credential}</h5>}
             {education.field && (
                 <p className="text-sm text-primary">{education.field}</p>
             )}
-            <p className="text-sm text-muted-foreground">{education.institution}</p>
+            {institution && <p className="text-sm text-muted-foreground">{institution}</p>}
+            {education.location && (
+                <p className="text-sm text-muted-foreground">{education.location}</p>
+            )}
             <div className="flex items-center gap-3 text-xs text-muted-foreground mt-1">
                 {education.graduation_date && <span>{education.graduation_date}</span>}
                 {education.gpa && <span>GPA: {education.gpa}</span>}

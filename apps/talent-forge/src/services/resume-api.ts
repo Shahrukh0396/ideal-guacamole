@@ -76,19 +76,26 @@ function normalizeJob(job: Record<string, unknown>): ResumeJob {
 
 // Parsed resume data structure
 export interface ParsedExperience {
-  company: string;
-  title: string;
+  company?: string;
+  organization?: string;
+  title?: string;
+  role?: string;
   location?: string;
+  dates?: string;
   start_date?: string;
   end_date?: string;
   description?: string;
   highlights?: string[];
+  bullets?: string[];
 }
 
 export interface ParsedEducation {
-  institution: string;
-  degree: string;
+  institution?: string;
+  school?: string;
+  degree?: string;
+  credential?: string;
   field?: string;
+  location?: string;
   graduation_date?: string;
   gpa?: string;
 }
@@ -108,9 +115,16 @@ export interface ParsedResume {
   website?: string;
   summary?: string;
   skills?: string[];
+  technical_skills?: string[];
+  core_competencies?: string[];
   experience?: ParsedExperience[];
-  education?: ParsedEducation[];
-  certifications?: string[];
+  professional_experience?: ParsedExperience[];
+  education?: Array<ParsedEducation | string>;
+  certifications?: Array<string | { name?: string; title?: string }>;
+  additional_information?: string[];
+  volunteer_experience?: ParsedExperience[];
+  extracurricular_activities?: string[];
+  bar_licenses?: string[];
   languages?: (string | ParsedLanguage)[];
 }
 
